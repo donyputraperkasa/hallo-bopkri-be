@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum ComplaintCategory {
+  QUESTION
+  APPRECIATION
+  COMPLAINT
+}
+
+model Admin {
+  id           String   @id @default(uuid()) @db.Char(36)
+  username     String   @unique @db.VarChar(50)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("admins")
+}
+
+model ComplaintStatus {
+  id          String             @id @default(uuid()) @db.Char(36)
+  code        String             @unique @db.VarChar(50)
+  name        String             @db.VarChar(100)
+  description String?            @db.VarChar(255)
+  color       String?            @db.VarChar(20)
+  sortOrder   Int                @default(0) @map("sort_order")
+  isFinal     Boolean            @default(false) @map("is_final")
+  isActive    Boolean            @default(true) @map("is_active")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  complaints Complaint[]
+  histories   ComplaintHistory[]
+
+  @@index([isActive, sortOrder])
+  @@map("complaint_statuses")
+}
+
+model Complaint {
+  id           String              @id @default(uuid()) @db.Char(36)
+  ticketCode   String              @unique @map("ticket_code") @db.VarChar(40)
+  category     ComplaintCategory
+  reporterName String?             @map("reporter_name") @db.VarChar(100)
+  contact      String?             @db.VarChar(150)
+  content      String              @db.Text
+  statusId     String              @map("status_id") @db.Char(36)
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  status       ComplaintStatus     @relation(fields: [statusId], references: [id])
+  histories    ComplaintHistory[]
+  attachments  ComplaintAttachment[]
+
+  @@index([statusId, createdAt])
+  @@index([category, createdAt])
+  @@map("complaints")
+}
+
+model ComplaintHistory {
+  id          String          @id @default(uuid()) @db.Char(36)
+  complaintId String          @map("complaint_id") @db.Char(36)
+  statusId    String          @map("status_id") @db.Char(36)
+  publicNote  String?         @map("public_note") @db.VarChar(500)
+  createdAt   DateTime        @default(now()) @map("created_at")
+  complaint   Complaint       @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  status      ComplaintStatus @relation(fields: [statusId], references: [id])
+
+  @@index([complaintId, createdAt])
+  @@index([statusId])
+  @@map("complaint_histories")
+}
+
+model ComplaintAttachment {
+  id           String    @id @default(uuid()) @db.Char(36)
+  complaintId  String    @map("complaint_id") @db.Char(36)
+  originalName String    @map("original_name") @db.VarChar(255)
+  storageKey   String    @map("storage_key") @db.VarChar(255)
+  mimeType     String    @map("mime_type") @db.VarChar(100)
+  size         Int
+  createdAt    DateTime  @default(now()) @map("created_at")
+  complaint    Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  @@index([complaintId])
+  @@map("complaint_attachments")
+}
