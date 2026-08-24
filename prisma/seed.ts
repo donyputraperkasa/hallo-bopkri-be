@@ -20,13 +20,44 @@ async function main() {
   const prisma = new PrismaClient({
     adapter: new PrismaMariaDb(parseMysqlUrl(process.env.DATABASE_URL!)),
   });
-  const passwordHash = await bcrypt.hash(password, 12);
+  const ownerHash = await bcrypt.hash(password, 12);
 
+  // Owner (existing admin)
   await prisma.admin.upsert({
     where: { username },
-    update: { passwordHash },
-    create: { username, passwordHash },
+    update: { passwordHash: ownerHash, role: 'OWNER', displayName: 'Owner BOPKRI' },
+    create: { username, passwordHash: ownerHash, role: 'OWNER', displayName: 'Owner BOPKRI' },
   });
+
+  // Director
+  const directorPassword = process.env.DIRECTOR_PASSWORD ?? 'director1234';
+  const directorHash = await bcrypt.hash(directorPassword, 12);
+  await prisma.admin.upsert({
+    where: { username: 'director' },
+    update: { passwordHash: directorHash, role: 'DIRECTOR', displayName: 'Direktur BOPKRI' },
+    create: { username: 'director', passwordHash: directorHash, role: 'DIRECTOR', displayName: 'Direktur BOPKRI' },
+  });
+
+  // Manager per bidang
+  const managerPassword = process.env.MANAGER_PASSWORD ?? 'manager1234';
+  const managerHash = await bcrypt.hash(managerPassword, 12);
+  const bidangList = [
+    { username: 'mgr_pendidikan', bidang: 'pendidikan', displayName: 'Manajer Bidang Pendidikan' },
+    { username: 'mgr_keuangan',   bidang: 'keuangan',   displayName: 'Manajer Bidang Keuangan' },
+    { username: 'mgr_psdm',       bidang: 'PSDM',       displayName: 'Manajer Bidang PSDM' },
+    { username: 'mgr_humas',      bidang: 'humas',      displayName: 'Manajer Bidang Humas' },
+    { username: 'mgr_asset',      bidang: 'asset',      displayName: 'Manajer Bidang Asset & Sarpras' },
+    { username: 'mgr_sekretariat',bidang: 'sekretariat',displayName: 'Manajer Bidang Sekretariat' },
+    { username: 'mgr_lainnya',    bidang: 'lainnya',    displayName: 'Manajer Bidang Umum & Lainnya' },
+  ];
+
+  for (const mgr of bidangList) {
+    await prisma.admin.upsert({
+      where: { username: mgr.username },
+      update: { passwordHash: managerHash, role: 'MANAGER', bidang: mgr.bidang, displayName: mgr.displayName },
+      create: { username: mgr.username, passwordHash: managerHash, role: 'MANAGER', bidang: mgr.bidang, displayName: mgr.displayName },
+    });
+  }
 
   const defaultStatuses = [
     {
@@ -86,6 +117,11 @@ async function main() {
       create: status,
     });
   }
+
+  console.log('✅ Seed berhasil!');
+  console.log(`  Owner    : ${username} / [your password]`);
+  console.log(`  Director : director / ${directorPassword}`);
+  console.log(`  Managers : mgr_pendidikan, mgr_keuangan, ... / ${managerPassword}`);
   await prisma.$disconnect();
 }
 

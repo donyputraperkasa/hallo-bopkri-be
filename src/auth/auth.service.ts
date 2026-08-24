@@ -23,8 +23,14 @@ export class AuthService {
       accessToken: await this.jwt.signAsync({
         sub: admin.id,
         username: admin.username,
+        role: admin.role,
+        bidang: admin.bidang ?? null,
+        displayName: admin.displayName ?? admin.username,
       }),
       tokenType: 'Bearer',
+      role: admin.role,
+      bidang: admin.bidang ?? null,
+      displayName: admin.displayName ?? admin.username,
     };
   }
 }

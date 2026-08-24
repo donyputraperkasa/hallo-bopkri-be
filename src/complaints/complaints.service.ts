@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { unlink } from 'fs/promises';
 import { resolve } from 'path';
@@ -9,6 +9,7 @@ import { getUploadDirectory } from './attachment.config';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
 import { ListComplaintsDto } from './dto/list-complaints.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { CreateDispatchDto } from './dto/create-dispatch.dto';
 
 @Injectable()
 export class ComplaintsService {
@@ -27,6 +28,7 @@ export class ComplaintsService {
           reporterName: dto.reporterName?.trim() || null,
           contact: dto.contact?.trim() || null,
           content: dto.content.trim(),
+          tags: (dto.tags?.trim() || dto.tag?.trim()) || null,
           status: { connect: { code: 'NEW' } },
           histories: {
             create: {
@@ -68,6 +70,7 @@ export class ComplaintsService {
       select: {
         ticketCode: true,
         category: true,
+        tags: true,
         status: {
           select: {
             id: true,
@@ -117,6 +120,7 @@ export class ComplaintsService {
           category: true,
           reporterName: true,
           content: true,
+          tags: true,
           status: {
             select: {
               id: true,
@@ -144,6 +148,79 @@ export class ComplaintsService {
     };
   }
 
+  async listDispatched(adminId: string, query: ListComplaintsDto) {
+    const dispatches = await this.prisma.complaintDispatch.findMany({
+      where: { adminId },
+      select: { complaintId: true },
+    });
+    const complaintIds = dispatches.map((d) => d.complaintId);
+    if (complaintIds.length === 0) {
+      return { data: [], meta: { page: 1, limit: query.limit, total: 0, totalPages: 0 } };
+    }
+    const where: Prisma.ComplaintWhereInput = {
+      ...this.buildWhere(query),
+      id: { in: complaintIds },
+    };
+    const skip = (query.page - 1) * query.limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.complaint.findMany({
+        where,
+        skip,
+        take: query.limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          ticketCode: true,
+          category: true,
+          reporterName: true,
+          content: true,
+          tags: true,
+          status: {
+            select: { id: true, code: true, name: true, color: true, isFinal: true },
+          },
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { attachments: true } },
+        },
+      }),
+      this.prisma.complaint.count({ where }),
+    ]);
+    return {
+      data,
+      meta: { page: query.page, limit: query.limit, total, totalPages: Math.ceil(total / query.limit) },
+    };
+  }
+
+  async dispatch(complaintId: string, dto: CreateDispatchDto) {
+    const complaint = await this.prisma.complaint.findUnique({ where: { id: complaintId } });
+    if (!complaint) throw new NotFoundException('Aduan tidak ditemukan.');
+    const admin = await this.prisma.admin.findUnique({ where: { id: dto.adminId } });
+    if (!admin) throw new NotFoundException('Admin tujuan tidak ditemukan.');
+
+    try {
+      const result = await this.prisma.complaintDispatch.create({
+        data: { complaintId, adminId: dto.adminId, note: dto.note?.trim() || null },
+        include: { admin: { select: { id: true, username: true, role: true, bidang: true, displayName: true } } },
+      });
+      return { message: 'Aduan berhasil didisposisikan.', dispatch: result };
+    } catch (e: unknown) {
+      if (e && typeof e === 'object' && 'code' in e && e.code === 'P2002') {
+        throw new ConflictException('Aduan sudah pernah didisposisikan ke admin ini.');
+      }
+      throw e;
+    }
+  }
+
+  async getDispatches(complaintId: string) {
+    return this.prisma.complaintDispatch.findMany({
+      where: { complaintId },
+      include: {
+        admin: { select: { id: true, username: true, role: true, bidang: true, displayName: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async detail(id: string) {
     const complaint = await this.prisma.complaint.findUnique({
       where: { id },
@@ -160,6 +237,11 @@ export class ComplaintsService {
             mimeType: true,
             size: true,
             createdAt: true,
+          },
+        },
+        dispatches: {
+          include: {
+            admin: { select: { id: true, username: true, role: true, bidang: true, displayName: true } },
           },
         },
       },
@@ -210,6 +292,36 @@ export class ComplaintsService {
         reporterName: true,
         contact: true,
         content: true,
+        tags: true,
+        status: { select: { code: true, name: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async exportDispatchedRows(adminId: string, query: ListComplaintsDto) {
+    const dispatches = await this.prisma.complaintDispatch.findMany({
+      where: { adminId },
+      select: { complaintId: true },
+    });
+    const complaintIds = dispatches.map((d) => d.complaintId);
+    if (complaintIds.length === 0) {
+      return [];
+    }
+    return this.prisma.complaint.findMany({
+      where: {
+        ...this.buildWhere(query),
+        id: { in: complaintIds },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        ticketCode: true,
+        category: true,
+        reporterName: true,
+        contact: true,
+        content: true,
+        tags: true,
         status: { select: { code: true, name: true } },
         createdAt: true,
         updatedAt: true,
@@ -266,9 +378,11 @@ export class ComplaintsService {
   }
 
   private buildWhere(query: ListComplaintsDto): Prisma.ComplaintWhereInput {
+    const tagFilter = query.tag?.trim() || query.tags?.trim();
     return {
       category: query.category,
       statusId: query.statusId,
+      ...(tagFilter ? { tags: { contains: tagFilter } } : {}),
       createdAt:
         query.dateFrom || query.dateTo
           ? {

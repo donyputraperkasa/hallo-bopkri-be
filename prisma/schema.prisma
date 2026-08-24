@@ -12,12 +12,22 @@ enum ComplaintCategory {
   COMPLAINT
 }
 
+enum AdminRole {
+  OWNER
+  DIRECTOR
+  MANAGER
+}
+
 model Admin {
-  id           String   @id @default(uuid()) @db.Char(36)
-  username     String   @unique @db.VarChar(50)
-  passwordHash String   @map("password_hash") @db.VarChar(255)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String             @id @default(uuid()) @db.Char(36)
+  username     String             @unique @db.VarChar(50)
+  passwordHash String             @map("password_hash") @db.VarChar(255)
+  role         AdminRole          @default(OWNER)
+  bidang       String?            @db.VarChar(50)
+  displayName  String?            @map("display_name") @db.VarChar(100)
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  dispatches   ComplaintDispatch[]
 
   @@map("admins")
 }
@@ -33,7 +43,7 @@ model ComplaintStatus {
   isActive    Boolean            @default(true) @map("is_active")
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
-  complaints Complaint[]
+  complaints  Complaint[]
   histories   ComplaintHistory[]
 
   @@index([isActive, sortOrder])
@@ -41,18 +51,20 @@ model ComplaintStatus {
 }
 
 model Complaint {
-  id           String              @id @default(uuid()) @db.Char(36)
-  ticketCode   String              @unique @map("ticket_code") @db.VarChar(40)
+  id           String               @id @default(uuid()) @db.Char(36)
+  ticketCode   String               @unique @map("ticket_code") @db.VarChar(40)
   category     ComplaintCategory
-  reporterName String?             @map("reporter_name") @db.VarChar(100)
-  contact      String?             @db.VarChar(150)
-  content      String              @db.Text
-  statusId     String              @map("status_id") @db.Char(36)
-  createdAt    DateTime            @default(now()) @map("created_at")
-  updatedAt    DateTime            @updatedAt @map("updated_at")
-  status       ComplaintStatus     @relation(fields: [statusId], references: [id])
+  reporterName String?              @map("reporter_name") @db.VarChar(100)
+  contact      String?              @db.VarChar(150)
+  content      String               @db.Text
+  tags         String?              @db.VarChar(255)
+  statusId     String               @map("status_id") @db.Char(36)
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  status       ComplaintStatus      @relation(fields: [statusId], references: [id])
   histories    ComplaintHistory[]
   attachments  ComplaintAttachment[]
+  dispatches   ComplaintDispatch[]
 
   @@index([statusId, createdAt])
   @@index([category, createdAt])
@@ -86,3 +98,19 @@ model ComplaintAttachment {
   @@index([complaintId])
   @@map("complaint_attachments")
 }
+
+model ComplaintDispatch {
+  id          String    @id @default(uuid()) @db.Char(36)
+  complaintId String    @map("complaint_id") @db.Char(36)
+  adminId     String    @map("admin_id") @db.Char(36)
+  note        String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  complaint   Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  admin       Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([complaintId, adminId])
+  @@index([adminId])
+  @@index([complaintId])
+  @@map("complaint_dispatches")
+}
+

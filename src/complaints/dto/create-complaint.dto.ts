@@ -31,6 +31,24 @@ export class CreateComplaintDto {
   content: string;
 
   @ApiPropertyOptional({
+    description: 'Tag bidang terkait (comma-separated), contoh: pendidikan,keuangan',
+    example: 'pendidikan,keuangan',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 255)
+  tags?: string;
+
+  @ApiPropertyOptional({
+    description: 'Tag tunggal bidang terkait (alternatif), contoh: pendidikan',
+    example: 'pendidikan',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 255)
+  tag?: string;
+
+  @ApiPropertyOptional({
     description:
       'Maksimal 3 file JPG, PNG, atau PDF; masing-masing maksimal 5 MB',
     type: 'array',

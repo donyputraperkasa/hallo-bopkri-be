@@ -6,9 +6,18 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { AdminRole } from '@prisma/client';
+
+export interface AdminPayload {
+  sub: string;
+  username: string;
+  role: AdminRole;
+  bidang: string | null;
+  displayName: string;
+}
 
 interface AdminRequest extends Request {
-  admin?: { sub: string; username: string };
+  admin?: AdminPayload;
 }
 
 @Injectable()
@@ -23,10 +32,7 @@ export class AdminAuthGuard implements CanActivate {
     }
 
     try {
-      request.admin = await this.jwt.verifyAsync<{
-        sub: string;
-        username: string;
-      }>(token);
+      request.admin = await this.jwt.verifyAsync<AdminPayload>(token);
       return true;
     } catch {
       throw new UnauthorizedException(

@@ -1,21 +1,32 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
+  Req,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { createReadStream } from 'fs';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AdminAuthGuard } from '../auth/admin-auth.guard';
+import { AdminAuthGuard, AdminPayload } from '../auth/admin-auth.guard';
 import { ComplaintsService } from './complaints.service';
 import { ListComplaintsDto } from './dto/list-complaints.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { CreateDispatchDto } from './dto/create-dispatch.dto';
 import { ReportExportService } from './report-export.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { AdminRole } from '@prisma/client';
+import { Request } from 'express';
+
+interface AdminRequest extends Request {
+  admin?: AdminPayload;
+}
 
 @ApiTags('Admin Complaints')
 @ApiBearerAuth()
@@ -25,6 +36,7 @@ export class AdminComplaintsController {
   constructor(
     private readonly complaintsService: ComplaintsService,
     private readonly reportExport: ReportExportService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get('dashboard')
@@ -35,14 +47,44 @@ export class AdminComplaintsController {
 
   @Get()
   @ApiOperation({ summary: 'Daftar aduan dengan filter dan pagination' })
-  list(@Query() query: ListComplaintsDto) {
+  list(@Query() query: ListComplaintsDto, @Req() req: AdminRequest) {
+    const admin = req.admin!;
+    // Manager hanya bisa melihat aduan yang sudah didisposisikan kepada mereka
+    if (admin.role === AdminRole.MANAGER) {
+      return this.complaintsService.listDispatched(admin.sub, query);
+    }
+    // Owner dan Director dapat melihat seluruh aduan secara langsung
     return this.complaintsService.list(query);
+  }
+
+  @Get('users')
+  @ApiOperation({ summary: 'Daftar admin (manager & director) untuk disposisi' })
+  async listUsers() {
+    return this.prisma.admin.findMany({
+      where: { role: { in: [AdminRole.MANAGER, AdminRole.DIRECTOR] } },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        bidang: true,
+        displayName: true,
+        createdAt: true,
+      },
+      orderBy: [{ role: 'asc' }, { displayName: 'asc' }],
+    });
   }
 
   @Get('export.xlsx')
   @ApiOperation({ summary: 'Export laporan aduan ke Excel' })
-  async exportExcel(@Query() query: ListComplaintsDto) {
-    const rows = await this.complaintsService.exportRows(query);
+  async exportExcel(
+    @Query() query: ListComplaintsDto,
+    @Req() req: AdminRequest,
+  ) {
+    const admin = req.admin!;
+    const rows =
+      admin.role === AdminRole.MANAGER
+        ? await this.complaintsService.exportDispatchedRows(admin.sub, query)
+        : await this.complaintsService.exportRows(query);
     const buffer = await this.reportExport.toExcel(rows);
     return new StreamableFile(buffer, {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -52,8 +94,15 @@ export class AdminComplaintsController {
 
   @Get('export.pdf')
   @ApiOperation({ summary: 'Export laporan aduan ke PDF' })
-  async exportPdf(@Query() query: ListComplaintsDto) {
-    const rows = await this.complaintsService.exportRows(query);
+  async exportPdf(
+    @Query() query: ListComplaintsDto,
+    @Req() req: AdminRequest,
+  ) {
+    const admin = req.admin!;
+    const rows =
+      admin.role === AdminRole.MANAGER
+        ? await this.complaintsService.exportDispatchedRows(admin.sub, query)
+        : await this.complaintsService.exportRows(query);
     const buffer = await this.reportExport.toPdf(rows);
     return new StreamableFile(buffer, {
       type: 'application/pdf',
@@ -75,16 +124,69 @@ export class AdminComplaintsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detail lengkap aduan' })
-  detail(@Param('id', ParseUUIDPipe) id: string) {
+  async detail(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AdminRequest,
+  ) {
+    const admin = req.admin!;
+    if (admin.role === AdminRole.MANAGER) {
+      const hasDispatch = await this.prisma.complaintDispatch.findFirst({
+        where: { complaintId: id, adminId: admin.sub },
+      });
+      if (!hasDispatch) {
+        throw new ForbiddenException(
+          'Anda tidak memiliki akses untuk melihat aduan ini.',
+        );
+      }
+    }
     return this.complaintsService.detail(id);
   }
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Ubah status dan tambahkan progres publik' })
-  updateStatus(
+  async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStatusDto,
+    @Req() req: AdminRequest,
   ) {
+    const admin = req.admin!;
+    if (admin.role === AdminRole.DIRECTOR) {
+      throw new ForbiddenException(
+        'Direktur hanya memiliki hak akses pemantauan (read-only).',
+      );
+    }
+    if (admin.role === AdminRole.MANAGER) {
+      const hasDispatch = await this.prisma.complaintDispatch.findFirst({
+        where: { complaintId: id, adminId: admin.sub },
+      });
+      if (!hasDispatch) {
+        throw new ForbiddenException(
+          'Anda tidak dapat mengubah status aduan yang belum didisposisikan kepada Anda.',
+        );
+      }
+    }
     return this.complaintsService.updateStatus(id, dto);
+  }
+
+  @Post(':id/dispatch')
+  @ApiOperation({ summary: 'Disposisikan aduan ke manager atau director' })
+  dispatch(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateDispatchDto,
+    @Req() req: AdminRequest,
+  ) {
+    const admin = req.admin!;
+    if (admin.role !== AdminRole.OWNER) {
+      throw new ForbiddenException(
+        'Hanya owner yang memiliki hak akses untuk mendisposisikan aduan.',
+      );
+    }
+    return this.complaintsService.dispatch(id, dto);
+  }
+
+  @Get(':id/dispatches')
+  @ApiOperation({ summary: 'Daftar disposisi untuk aduan tertentu' })
+  getDispatches(@Param('id', ParseUUIDPipe) id: string) {
+    return this.complaintsService.getDispatches(id);
   }
 }
