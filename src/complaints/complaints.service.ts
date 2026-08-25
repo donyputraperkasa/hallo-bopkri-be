@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { unlink } from 'fs/promises';
 import { resolve } from 'path';
@@ -194,21 +194,69 @@ export class ComplaintsService {
   async dispatch(complaintId: string, dto: CreateDispatchDto) {
     const complaint = await this.prisma.complaint.findUnique({ where: { id: complaintId } });
     if (!complaint) throw new NotFoundException('Aduan tidak ditemukan.');
-    const admin = await this.prisma.admin.findUnique({ where: { id: dto.adminId } });
-    if (!admin) throw new NotFoundException('Admin tujuan tidak ditemukan.');
 
-    try {
-      const result = await this.prisma.complaintDispatch.create({
-        data: { complaintId, adminId: dto.adminId, note: dto.note?.trim() || null },
-        include: { admin: { select: { id: true, username: true, role: true, bidang: true, displayName: true } } },
-      });
-      return { message: 'Aduan berhasil didisposisikan.', dispatch: result };
-    } catch (e: unknown) {
-      if (e && typeof e === 'object' && 'code' in e && e.code === 'P2002') {
-        throw new ConflictException('Aduan sudah pernah didisposisikan ke admin ini.');
-      }
-      throw e;
+    const targetIds = (
+      dto.adminIds && dto.adminIds.length > 0
+        ? dto.adminIds
+        : dto.adminId
+          ? [dto.adminId]
+          : []
+    ).filter(Boolean);
+
+    if (targetIds.length === 0) {
+      throw new BadRequestException('Pilih setidaknya satu penerima disposisi.');
     }
+
+    const admins = await this.prisma.admin.findMany({
+      where: { id: { in: targetIds } },
+    });
+    if (admins.length === 0) {
+      throw new NotFoundException('Admin tujuan tidak ditemukan.');
+    }
+
+    const results: any[] = [];
+    for (const admin of admins) {
+      try {
+        const result = await this.prisma.complaintDispatch.upsert({
+          where: { complaintId_adminId: { complaintId, adminId: admin.id } },
+          update: { note: dto.note?.trim() || null },
+          create: { complaintId, adminId: admin.id, note: dto.note?.trim() || null },
+          include: { admin: { select: { id: true, username: true, role: true, bidang: true, displayName: true } } },
+        });
+        results.push(result);
+      } catch (e: unknown) {
+        if (targetIds.length === 1 && e && typeof e === 'object' && 'code' in e && (e as any).code === 'P2002') {
+          throw new ConflictException('Aduan sudah pernah didisposisikan ke admin ini.');
+        }
+      }
+    }
+
+    // Sync tags if new bidangs are introduced
+    const newBidangs = admins
+      .map((a) => a.bidang)
+      .filter((b): b is string => Boolean(b && b.trim()));
+
+    if (newBidangs.length > 0) {
+      const currentTags = (complaint.tags || '')
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      const combined = Array.from(
+        new Set([...currentTags, ...newBidangs.map((b) => b.toLowerCase())]),
+      );
+      if (combined.length > currentTags.length) {
+        await this.prisma.complaint.update({
+          where: { id: complaintId },
+          data: { tags: combined.join(',') },
+        });
+      }
+    }
+
+    const message = results.length > 1
+      ? `Aduan berhasil didisposisikan ke ${results.length} penerima.`
+      : 'Aduan berhasil didisposisikan.';
+
+    return { message, dispatches: results, dispatch: results[0] };
   }
 
   async getDispatches(complaintId: string) {

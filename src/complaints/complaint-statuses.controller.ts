@@ -15,7 +15,7 @@ import { AdminAuthGuard, AdminPayload } from '../auth/admin-auth.guard';
 import { ComplaintStatusesService } from './complaint-statuses.service';
 import { CreateComplaintStatusDto } from './dto/create-complaint-status.dto';
 import { UpdateComplaintStatusDto } from './dto/update-complaint-status.dto';
-import { AdminRole } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { Request } from 'express';
 
 interface AdminRequest extends Request {
@@ -38,7 +38,7 @@ export class ComplaintStatusesController {
   @Post()
   @ApiOperation({ summary: 'Daftarkan status aduan baru (Owner only)' })
   create(@Body() dto: CreateComplaintStatusDto, @Req() req: AdminRequest) {
-    if (req.admin?.role !== AdminRole.OWNER) {
+    if (req.admin?.role !== Role.owner) {
       throw new ForbiddenException('Hanya owner yang dapat mengelola master status.');
     }
     return this.statusesService.create(dto);
@@ -51,7 +51,7 @@ export class ComplaintStatusesController {
     @Body() dto: UpdateComplaintStatusDto,
     @Req() req: AdminRequest,
   ) {
-    if (req.admin?.role !== AdminRole.OWNER) {
+    if (req.admin?.role !== Role.owner) {
       throw new ForbiddenException('Hanya owner yang dapat mengelola master status.');
     }
     return this.statusesService.update(id, dto);

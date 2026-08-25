@@ -3,7 +3,7 @@ import { NotFoundException, ConflictException } from '@nestjs/common';
 import { ComplaintsService } from './complaints.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { ComplaintCategory, AdminRole } from '@prisma/client';
+import { ComplaintCategory, Role } from '@prisma/client';
 
 describe('ComplaintsService', () => {
   let service: ComplaintsService;
@@ -32,9 +32,11 @@ describe('ComplaintsService', () => {
     complaintDispatch: {
       create: jest.fn(),
       findMany: jest.fn(),
+      upsert: jest.fn(),
     },
     admin: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
     },
     $transaction: jest.fn((cbOrPromises) => {
       if (Array.isArray(cbOrPromises)) {
@@ -183,10 +185,10 @@ describe('ComplaintsService', () => {
   });
 
   describe('dispatch and getDispatches', () => {
-    it('should dispatch complaint successfully', async () => {
-      mockPrisma.complaint.findUnique.mockResolvedValue({ id: 'comp-1' });
-      mockPrisma.admin.findUnique.mockResolvedValue({ id: 'admin-mgr', role: AdminRole.MANAGER });
-      mockPrisma.complaintDispatch.create.mockResolvedValue({
+    it('should dispatch complaint successfully with single admin', async () => {
+      mockPrisma.complaint.findUnique.mockResolvedValue({ id: 'comp-1', tags: 'pendidikan' });
+      mockPrisma.admin.findMany.mockResolvedValue([{ id: 'admin-mgr', role: Role.manager, bidang: 'pendidikan' }]);
+      mockPrisma.complaintDispatch.upsert.mockResolvedValue({
         id: 'disp-1',
         complaintId: 'comp-1',
         adminId: 'admin-mgr',
@@ -200,12 +202,32 @@ describe('ComplaintsService', () => {
       expect(res.message).toContain('berhasil didisposisikan');
     });
 
-    it('should throw ConflictException on duplicate dispatch', async () => {
+    it('should dispatch complaint successfully with multiple admins', async () => {
+      mockPrisma.complaint.findUnique.mockResolvedValue({ id: 'comp-1', tags: 'pendidikan' });
+      mockPrisma.admin.findMany.mockResolvedValue([
+        { id: 'admin-mgr-1', role: Role.manager, bidang: 'pendidikan' },
+        { id: 'admin-mgr-2', role: Role.manager, bidang: 'keuangan' },
+      ]);
+      mockPrisma.complaintDispatch.upsert.mockResolvedValue({
+        id: 'disp-1',
+        complaintId: 'comp-1',
+        adminId: 'admin-mgr-1',
+      });
+      mockPrisma.complaint.update.mockResolvedValue({});
+
+      const res = await service.dispatch('comp-1', {
+        adminIds: ['admin-mgr-1', 'admin-mgr-2'],
+        note: 'Koordinasi dua bidang',
+      });
+      expect(res.message).toContain('2 penerima');
+    });
+
+    it('should throw ConflictException on single duplicate dispatch if upsert throws', async () => {
       mockPrisma.complaint.findUnique.mockResolvedValue({ id: 'comp-1' });
-      mockPrisma.admin.findUnique.mockResolvedValue({ id: 'admin-mgr', role: AdminRole.MANAGER });
+      mockPrisma.admin.findMany.mockResolvedValue([{ id: 'admin-mgr', role: Role.manager }]);
       const error: any = new Error('Unique constraint');
       error.code = 'P2002';
-      mockPrisma.complaintDispatch.create.mockRejectedValue(error);
+      mockPrisma.complaintDispatch.upsert.mockRejectedValue(error);
 
       await expect(
         service.dispatch('comp-1', { adminId: 'admin-mgr' }),

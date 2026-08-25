@@ -25,8 +25,8 @@ async function main() {
   // Owner (existing admin)
   await prisma.admin.upsert({
     where: { username },
-    update: { passwordHash: ownerHash, role: 'OWNER', displayName: 'Owner BOPKRI' },
-    create: { username, passwordHash: ownerHash, role: 'OWNER', displayName: 'Owner BOPKRI' },
+    update: { passwordHash: ownerHash, role: 'owner', displayName: 'Owner BOPKRI' },
+    create: { username, passwordHash: ownerHash, role: 'owner', displayName: 'Owner BOPKRI' },
   });
 
   // Director
@@ -34,8 +34,8 @@ async function main() {
   const directorHash = await bcrypt.hash(directorPassword, 12);
   await prisma.admin.upsert({
     where: { username: 'director' },
-    update: { passwordHash: directorHash, role: 'DIRECTOR', displayName: 'Direktur BOPKRI' },
-    create: { username: 'director', passwordHash: directorHash, role: 'DIRECTOR', displayName: 'Direktur BOPKRI' },
+    update: { passwordHash: directorHash, role: 'director', displayName: 'Direktur BOPKRI' },
+    create: { username: 'director', passwordHash: directorHash, role: 'director', displayName: 'Direktur BOPKRI' },
   });
 
   // Manager per bidang
@@ -47,15 +47,14 @@ async function main() {
     { username: 'mgr_psdm',       bidang: 'PSDM',       displayName: 'Manajer Bidang PSDM' },
     { username: 'mgr_humas',      bidang: 'humas',      displayName: 'Manajer Bidang Humas' },
     { username: 'mgr_asset',      bidang: 'asset',      displayName: 'Manajer Bidang Asset & Sarpras' },
-    { username: 'mgr_sekretariat',bidang: 'sekretariat',displayName: 'Manajer Bidang Sekretariat' },
     { username: 'mgr_lainnya',    bidang: 'lainnya',    displayName: 'Manajer Bidang Umum & Lainnya' },
   ];
 
   for (const mgr of bidangList) {
     await prisma.admin.upsert({
       where: { username: mgr.username },
-      update: { passwordHash: managerHash, role: 'MANAGER', bidang: mgr.bidang, displayName: mgr.displayName },
-      create: { username: mgr.username, passwordHash: managerHash, role: 'MANAGER', bidang: mgr.bidang, displayName: mgr.displayName },
+      update: { passwordHash: managerHash, role: 'manager', bidang: mgr.bidang, displayName: mgr.displayName },
+      create: { username: mgr.username, passwordHash: managerHash, role: 'manager', bidang: mgr.bidang, displayName: mgr.displayName },
     });
   }
 

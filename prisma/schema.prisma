@@ -12,17 +12,17 @@ enum ComplaintCategory {
   COMPLAINT
 }
 
-enum AdminRole {
-  OWNER
-  DIRECTOR
-  MANAGER
+enum Role {
+  owner
+  manager
+  director
 }
 
 model Admin {
   id           String             @id @default(uuid()) @db.Char(36)
   username     String             @unique @db.VarChar(50)
   passwordHash String             @map("password_hash") @db.VarChar(255)
-  role         AdminRole          @default(OWNER)
+  role         Role               @default(owner)
   bidang       String?            @db.VarChar(50)
   displayName  String?            @map("display_name") @db.VarChar(100)
   createdAt    DateTime           @default(now()) @map("created_at")

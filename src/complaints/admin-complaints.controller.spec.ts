@@ -4,7 +4,7 @@ import { AdminComplaintsController } from './admin-complaints.controller';
 import { ComplaintsService } from './complaints.service';
 import { ReportExportService } from './report-export.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdminRole } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 
 describe('AdminComplaintsController', () => {
@@ -56,21 +56,21 @@ describe('AdminComplaintsController', () => {
 
   describe('list', () => {
     it('should call list for OWNER', async () => {
-      const req: any = { admin: { sub: 'owner-1', role: AdminRole.OWNER } };
+      const req: any = { admin: { sub: 'owner-1', role: Role.owner } };
       await controller.list({ page: 1, limit: 10 } as any, req);
       expect(service.list).toHaveBeenCalled();
       expect(service.listDispatched).not.toHaveBeenCalled();
     });
 
     it('should call list for DIRECTOR (sees all complaints directly)', async () => {
-      const req: any = { admin: { sub: 'dir-1', role: AdminRole.DIRECTOR } };
+      const req: any = { admin: { sub: 'dir-1', role: Role.director } };
       await controller.list({ page: 1, limit: 10 } as any, req);
       expect(service.list).toHaveBeenCalled();
       expect(service.listDispatched).not.toHaveBeenCalled();
     });
 
     it('should call listDispatched for MANAGER', async () => {
-      const req: any = { admin: { sub: 'mgr-1', role: AdminRole.MANAGER } };
+      const req: any = { admin: { sub: 'mgr-1', role: Role.manager } };
       await controller.list({ page: 1, limit: 10 } as any, req);
       expect(service.listDispatched).toHaveBeenCalledWith('mgr-1', { page: 1, limit: 10 });
       expect(service.list).not.toHaveBeenCalled();
@@ -79,28 +79,28 @@ describe('AdminComplaintsController', () => {
 
   describe('detail', () => {
     it('should allow OWNER to see detail without dispatch check', async () => {
-      const req: any = { admin: { sub: 'owner-1', role: AdminRole.OWNER } };
+      const req: any = { admin: { sub: 'owner-1', role: Role.owner } };
       const res = await controller.detail('comp-1', req);
       expect(res.id).toBe('comp-1');
       expect(prisma.complaintDispatch.findFirst).not.toHaveBeenCalled();
     });
 
     it('should allow DIRECTOR to see detail without dispatch check', async () => {
-      const req: any = { admin: { sub: 'dir-1', role: AdminRole.DIRECTOR } };
+      const req: any = { admin: { sub: 'dir-1', role: Role.director } };
       const res = await controller.detail('comp-1', req);
       expect(res.id).toBe('comp-1');
       expect(prisma.complaintDispatch.findFirst).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException if MANAGER tries to see non-dispatched complaint', async () => {
-      const req: any = { admin: { sub: 'mgr-1', role: AdminRole.MANAGER } };
+      const req: any = { admin: { sub: 'mgr-1', role: Role.manager } };
       jest.spyOn(prisma.complaintDispatch, 'findFirst').mockResolvedValue(null);
 
       await expect(controller.detail('comp-1', req)).rejects.toThrow(ForbiddenException);
     });
 
     it('should allow MANAGER if complaint is dispatched to them', async () => {
-      const req: any = { admin: { sub: 'mgr-1', role: AdminRole.MANAGER } };
+      const req: any = { admin: { sub: 'mgr-1', role: Role.manager } };
       jest.spyOn(prisma.complaintDispatch, 'findFirst').mockResolvedValue({ id: 'disp-1' } as any);
 
       const res = await controller.detail('comp-1', req);
@@ -110,18 +110,18 @@ describe('AdminComplaintsController', () => {
 
   describe('dispatch', () => {
     it('should allow OWNER to dispatch', async () => {
-      const req: any = { admin: { sub: 'owner-1', role: AdminRole.OWNER } };
+      const req: any = { admin: { sub: 'owner-1', role: Role.owner } };
       await controller.dispatch('comp-1', { adminId: 'mgr-1' }, req);
       expect(service.dispatch).toHaveBeenCalledWith('comp-1', { adminId: 'mgr-1' });
     });
 
     it('should reject non-owner from dispatching', () => {
-      const reqDir: any = { admin: { sub: 'dir-1', role: AdminRole.DIRECTOR } };
+      const reqDir: any = { admin: { sub: 'dir-1', role: Role.director } };
       expect(() => controller.dispatch('comp-1', { adminId: 'mgr-1' }, reqDir)).toThrow(
         ForbiddenException,
       );
 
-      const reqMgr: any = { admin: { sub: 'mgr-1', role: AdminRole.MANAGER } };
+      const reqMgr: any = { admin: { sub: 'mgr-1', role: Role.manager } };
       expect(() => controller.dispatch('comp-1', { adminId: 'dir-1' }, reqMgr)).toThrow(
         ForbiddenException,
       );
@@ -130,14 +130,14 @@ describe('AdminComplaintsController', () => {
 
   describe('updateStatus', () => {
     it('should prevent DIRECTOR from updating status (read-only)', async () => {
-      const req: any = { admin: { sub: 'dir-1', role: AdminRole.DIRECTOR } };
+      const req: any = { admin: { sub: 'dir-1', role: Role.director } };
       await expect(
         controller.updateStatus('comp-1', { statusId: 'stat-1' }, req),
       ).rejects.toThrow(ForbiddenException);
     });
 
     it('should allow OWNER to update status', async () => {
-      const req: any = { admin: { sub: 'owner-1', role: AdminRole.OWNER } };
+      const req: any = { admin: { sub: 'owner-1', role: Role.owner } };
       await controller.updateStatus('comp-1', { statusId: 'stat-1' }, req);
       expect(service.updateStatus).toHaveBeenCalled();
     });

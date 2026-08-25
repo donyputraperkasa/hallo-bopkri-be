@@ -6,12 +6,12 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
-import { AdminRole } from '@prisma/client';
+import { Role } from '@prisma/client';
 
 export interface AdminPayload {
   sub: string;
   username: string;
-  role: AdminRole;
+  role: Role;
   bidang: string | null;
   displayName: string;
 }

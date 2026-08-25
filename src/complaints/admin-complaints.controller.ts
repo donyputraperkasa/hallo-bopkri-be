@@ -21,7 +21,7 @@ import { UpdateStatusDto } from './dto/update-status.dto';
 import { CreateDispatchDto } from './dto/create-dispatch.dto';
 import { ReportExportService } from './report-export.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdminRole } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { Request } from 'express';
 
 interface AdminRequest extends Request {
@@ -50,7 +50,7 @@ export class AdminComplaintsController {
   list(@Query() query: ListComplaintsDto, @Req() req: AdminRequest) {
     const admin = req.admin!;
     // Manager hanya bisa melihat aduan yang sudah didisposisikan kepada mereka
-    if (admin.role === AdminRole.MANAGER) {
+    if (admin.role === Role.manager) {
       return this.complaintsService.listDispatched(admin.sub, query);
     }
     // Owner dan Director dapat melihat seluruh aduan secara langsung
@@ -61,7 +61,7 @@ export class AdminComplaintsController {
   @ApiOperation({ summary: 'Daftar admin (manager & director) untuk disposisi' })
   async listUsers() {
     return this.prisma.admin.findMany({
-      where: { role: { in: [AdminRole.MANAGER, AdminRole.DIRECTOR] } },
+      where: { role: { in: [Role.manager, Role.director] } },
       select: {
         id: true,
         username: true,
@@ -82,7 +82,7 @@ export class AdminComplaintsController {
   ) {
     const admin = req.admin!;
     const rows =
-      admin.role === AdminRole.MANAGER
+      admin.role === Role.manager
         ? await this.complaintsService.exportDispatchedRows(admin.sub, query)
         : await this.complaintsService.exportRows(query);
     const buffer = await this.reportExport.toExcel(rows);
@@ -100,7 +100,7 @@ export class AdminComplaintsController {
   ) {
     const admin = req.admin!;
     const rows =
-      admin.role === AdminRole.MANAGER
+      admin.role === Role.manager
         ? await this.complaintsService.exportDispatchedRows(admin.sub, query)
         : await this.complaintsService.exportRows(query);
     const buffer = await this.reportExport.toPdf(rows);
@@ -129,7 +129,7 @@ export class AdminComplaintsController {
     @Req() req: AdminRequest,
   ) {
     const admin = req.admin!;
-    if (admin.role === AdminRole.MANAGER) {
+    if (admin.role === Role.manager) {
       const hasDispatch = await this.prisma.complaintDispatch.findFirst({
         where: { complaintId: id, adminId: admin.sub },
       });
@@ -150,12 +150,12 @@ export class AdminComplaintsController {
     @Req() req: AdminRequest,
   ) {
     const admin = req.admin!;
-    if (admin.role === AdminRole.DIRECTOR) {
+    if (admin.role === Role.director) {
       throw new ForbiddenException(
         'Direktur hanya memiliki hak akses pemantauan (read-only).',
       );
     }
-    if (admin.role === AdminRole.MANAGER) {
+    if (admin.role === Role.manager) {
       const hasDispatch = await this.prisma.complaintDispatch.findFirst({
         where: { complaintId: id, adminId: admin.sub },
       });
@@ -176,7 +176,7 @@ export class AdminComplaintsController {
     @Req() req: AdminRequest,
   ) {
     const admin = req.admin!;
-    if (admin.role !== AdminRole.OWNER) {
+    if (admin.role !== Role.owner) {
       throw new ForbiddenException(
         'Hanya owner yang memiliki hak akses untuk mendisposisikan aduan.',
       );

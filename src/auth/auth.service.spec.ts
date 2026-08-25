@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdminRole } from '@prisma/client';
+import { Role } from '@prisma/client';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -47,7 +47,7 @@ describe('AuthService', () => {
       id: 'admin-123',
       username: 'admin',
       passwordHash,
-      role: AdminRole.OWNER,
+      role: Role.owner,
       bidang: null,
       displayName: 'Owner BOPKRI',
       createdAt: new Date(),
@@ -59,14 +59,14 @@ describe('AuthService', () => {
     expect(result).toEqual({
       accessToken: 'test-jwt-token',
       tokenType: 'Bearer',
-      role: AdminRole.OWNER,
+      role: Role.owner,
       bidang: null,
       displayName: 'Owner BOPKRI',
     });
     expect(jwt.signAsync).toHaveBeenCalledWith({
       sub: 'admin-123',
       username: 'admin',
-      role: AdminRole.OWNER,
+      role: Role.owner,
       bidang: null,
       displayName: 'Owner BOPKRI',
     });
@@ -78,7 +78,7 @@ describe('AuthService', () => {
       id: 'admin-123',
       username: 'admin',
       passwordHash,
-      role: AdminRole.OWNER,
+      role: Role.owner,
       bidang: null,
       displayName: 'Owner BOPKRI',
       createdAt: new Date(),
