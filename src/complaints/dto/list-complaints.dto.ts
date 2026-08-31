@@ -18,10 +18,15 @@ export class ListComplaintsDto {
   @IsEnum(ComplaintCategory)
   category?: ComplaintCategory;
 
-  @ApiPropertyOptional({ description: 'Filter berdasarkan ID status aduan' })
+  @ApiPropertyOptional({ description: 'Filter berdasarkan ID atau Code status aduan' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   statusId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter berdasarkan code status aduan' })
+  @IsOptional()
+  @IsString()
+  status?: string;
 
   @ApiPropertyOptional({ description: 'Pencarian kode tiket, isi, atau nama pelapor' })
   @IsOptional()

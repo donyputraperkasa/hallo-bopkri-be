@@ -9,8 +9,8 @@ export class NotificationsService {
   private readonly mailer?: Transporter;
 
   constructor(private readonly config: ConfigService) {
-    const host = config.get<string>('SMTP_HOST');
-    if (host) {
+    const host = config.get<string>('SMTP_HOST')?.trim();
+    if (host && !host.includes('example.com')) {
       this.mailer = nodemailer.createTransport({
         host,
         port: config.get<number>('SMTP_PORT', 587),
@@ -73,7 +73,7 @@ export class NotificationsService {
     subject: string,
     text: string,
   ) {
-    if (!to || !this.mailer) return;
+    if (!to || !this.mailer || to.includes('example.com')) return;
     try {
       await this.mailer.sendMail({
         from: this.config.get<string>('SMTP_FROM', 'Hallo BOPKRI'),
@@ -87,8 +87,8 @@ export class NotificationsService {
   }
 
   private async sendWhatsApp(to: string | undefined, message: string) {
-    const url = this.config.get<string>('WHATSAPP_GATEWAY_URL');
-    if (!to || !url) return;
+    const url = this.config.get<string>('WHATSAPP_GATEWAY_URL')?.trim();
+    if (!to || !url || url.includes('example.com')) return;
 
     try {
       const response = await fetch(url, {

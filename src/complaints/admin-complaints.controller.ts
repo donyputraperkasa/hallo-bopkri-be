@@ -168,6 +168,16 @@ export class AdminComplaintsController {
     return this.complaintsService.updateStatus(id, dto);
   }
 
+  @Post(':id/status')
+  @ApiOperation({ summary: 'Ubah status dan tambahkan progres publik (POST)' })
+  async updateStatusPost(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateStatusDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.updateStatus(id, dto, req);
+  }
+
   @Post(':id/dispatch')
   @ApiOperation({ summary: 'Disposisikan aduan ke manager atau director' })
   dispatch(

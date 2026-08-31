@@ -300,8 +300,16 @@ export class ComplaintsService {
 
   async updateStatus(id: string, dto: UpdateStatusDto) {
     await this.detail(id);
+    const targetStatus = (dto.statusId || dto.status || dto.statusCode)?.trim();
+    if (!targetStatus) {
+      throw new BadRequestException('Status ID atau status code wajib diisi.');
+    }
+
     const status = await this.prisma.complaintStatus.findFirst({
-      where: { id: dto.statusId, isActive: true },
+      where: {
+        isActive: true,
+        OR: [{ id: targetStatus }, { code: targetStatus }],
+      },
     });
     if (!status) {
       throw new NotFoundException('Status aktif tidak ditemukan.');
@@ -427,9 +435,16 @@ export class ComplaintsService {
 
   private buildWhere(query: ListComplaintsDto): Prisma.ComplaintWhereInput {
     const tagFilter = query.tag?.trim() || query.tags?.trim();
+    const statusFilter = query.statusId?.trim() || query.status?.trim();
     return {
       category: query.category,
-      statusId: query.statusId,
+      ...(statusFilter
+        ? {
+            status: {
+              OR: [{ id: statusFilter }, { code: statusFilter }],
+            },
+          }
+        : {}),
       ...(tagFilter ? { tags: { contains: tagFilter } } : {}),
       createdAt:
         query.dateFrom || query.dateTo

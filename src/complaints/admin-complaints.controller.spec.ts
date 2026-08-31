@@ -141,5 +141,11 @@ describe('AdminComplaintsController', () => {
       await controller.updateStatus('comp-1', { statusId: 'stat-1' }, req);
       expect(service.updateStatus).toHaveBeenCalled();
     });
+
+    it('should support POST method for updateStatus', async () => {
+      const req: any = { admin: { sub: 'owner-1', role: Role.owner } };
+      await controller.updateStatusPost('comp-1', { statusId: 'stat-1' }, req);
+      expect(service.updateStatus).toHaveBeenCalled();
+    });
   });
 });

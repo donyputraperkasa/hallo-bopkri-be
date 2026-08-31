@@ -1,13 +1,30 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, Length } from 'class-validator';
 
 export class UpdateStatusDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '00000000-0000-4000-8000-000000000004',
-    description: 'ID dari master complaint status',
+    description: 'ID (UUID) atau Code status aduan (e.g. NEW, IN_PROGRESS, RESOLVED)',
   })
-  @IsUUID()
-  statusId: string;
+  @IsOptional()
+  @IsString()
+  statusId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Status code atau ID alternatif',
+    example: 'IN_PROGRESS',
+  })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({
+    description: 'Status code alternatif',
+    example: 'IN_PROGRESS',
+  })
+  @IsOptional()
+  @IsString()
+  statusCode?: string;
 
   @ApiPropertyOptional({
     description: 'Catatan ini tampil kepada pelapor pada halaman pelacakan',

@@ -234,4 +234,43 @@ describe('ComplaintsService', () => {
       ).rejects.toThrow(ConflictException);
     });
   });
+
+  describe('updateStatus', () => {
+    it('should update status by statusId UUID or Code successfully', async () => {
+      mockPrisma.complaint.findUnique.mockResolvedValue({
+        id: 'comp-1',
+        ticketCode: 'ADU-1',
+        contact: 'user@example.com',
+        status: { id: 'stat-1', name: 'Baru' },
+        histories: [],
+        attachments: [],
+        dispatches: [],
+      });
+      mockPrisma.complaintStatus.findFirst.mockResolvedValue({
+        id: 'stat-2',
+        code: 'IN_PROGRESS',
+        name: 'Sedang Diproses',
+      });
+      mockPrisma.complaint.update.mockResolvedValue({
+        id: 'comp-1',
+        statusId: 'stat-2',
+        status: { id: 'stat-2', code: 'IN_PROGRESS', name: 'Sedang Diproses' },
+      });
+      mockPrisma.complaintHistory.create.mockResolvedValue({});
+
+      const result = await service.updateStatus('comp-1', {
+        statusId: 'IN_PROGRESS',
+        publicNote: 'Sedang dikerjakan oleh tim',
+      });
+
+      expect(result.id).toBe('comp-1');
+      expect(mockPrisma.complaintStatus.findFirst).toHaveBeenCalledWith({
+        where: {
+          isActive: true,
+          OR: [{ id: 'IN_PROGRESS' }, { code: 'IN_PROGRESS' }],
+        },
+      });
+      expect(mockNotifications.notifyStatusChanged).toHaveBeenCalled();
+    });
+  });
 });
