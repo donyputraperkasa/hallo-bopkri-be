@@ -74,7 +74,7 @@ describe('ComplaintsService', () => {
   });
 
   describe('create', () => {
-    it('should create complaint with tags', async () => {
+    it('should create complaint with COMPLAINT category and generate ADU prefix', async () => {
       const createdComplaint = {
         id: 'uuid-1',
         ticketCode: 'ADU-202608-ABCDEF1234',
@@ -99,13 +99,21 @@ describe('ComplaintsService', () => {
 
       expect(result.ticketCode).toBe(createdComplaint.ticketCode);
       expect(result.category).toBe(ComplaintCategory.COMPLAINT);
+      expect(mockPrisma.complaint.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ticketCode: expect.stringMatching(/^ADU-\d{6}-[A-F0-9]{20}$/),
+            category: ComplaintCategory.COMPLAINT,
+          }),
+        }),
+      );
       expect(mockNotifications.notifyNewComplaint).toHaveBeenCalledWith(createdComplaint);
     });
 
-    it('should fallback to tag if tags is not set', async () => {
+    it('should create question with QUESTION category and generate TNY prefix', async () => {
       const createdComplaint = {
         id: 'uuid-2',
-        ticketCode: 'ADU-202608-ABCDEF1235',
+        ticketCode: 'TNY-202608-ABCDEF1235',
         category: ComplaintCategory.QUESTION,
         content: 'Pertanyaan seputar pendaftaran',
         tags: 'pendidikan',
@@ -122,10 +130,42 @@ describe('ComplaintsService', () => {
       });
 
       expect(result.ticketCode).toBe(createdComplaint.ticketCode);
+      expect(result.category).toBe(ComplaintCategory.QUESTION);
       expect(mockPrisma.complaint.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
+            ticketCode: expect.stringMatching(/^TNY-\d{6}-[A-F0-9]{20}$/),
+            category: ComplaintCategory.QUESTION,
             tags: 'pendidikan',
+          }),
+        }),
+      );
+    });
+
+    it('should create appreciation with APPRECIATION category and generate APR prefix', async () => {
+      const createdComplaint = {
+        id: 'uuid-3',
+        ticketCode: 'APR-202608-ABCDEF1236',
+        category: ComplaintCategory.APPRECIATION,
+        content: 'Terima kasih atas pelayanannya',
+        status: { id: 'status-new', code: 'NEW', name: 'Aduan Baru' },
+        createdAt: new Date(),
+      };
+
+      mockPrisma.complaint.create.mockResolvedValue(createdComplaint);
+
+      const result = await service.create({
+        category: ComplaintCategory.APPRECIATION,
+        content: 'Terima kasih atas pelayanannya',
+      });
+
+      expect(result.ticketCode).toBe(createdComplaint.ticketCode);
+      expect(result.category).toBe(ComplaintCategory.APPRECIATION);
+      expect(mockPrisma.complaint.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ticketCode: expect.stringMatching(/^APR-\d{6}-[A-F0-9]{20}$/),
+            category: ComplaintCategory.APPRECIATION,
           }),
         }),
       );

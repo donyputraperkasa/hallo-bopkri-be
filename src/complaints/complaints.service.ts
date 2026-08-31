@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { randomBytes } from 'crypto';
 import { unlink } from 'fs/promises';
 import { resolve } from 'path';
-import { Prisma } from '@prisma/client';
+import { ComplaintCategory, Prisma } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { getUploadDirectory } from './attachment.config';
@@ -19,7 +19,7 @@ export class ComplaintsService {
   ) {}
 
   async create(dto: CreateComplaintDto, files: Express.Multer.File[] = []) {
-    const ticketCode = this.generateTicketCode();
+    const ticketCode = this.generateTicketCode(dto.category);
     try {
       const complaint = await this.prisma.complaint.create({
         data: {
@@ -427,10 +427,23 @@ export class ComplaintsService {
     };
   }
 
-  private generateTicketCode() {
+  private getPrefixByCategory(category?: ComplaintCategory): string {
+    switch (category) {
+      case ComplaintCategory.QUESTION:
+        return 'QUE';
+      case ComplaintCategory.APPRECIATION:
+        return 'APP';
+      case ComplaintCategory.COMPLAINT:
+      default:
+        return 'CMP';
+    }
+  }
+
+  private generateTicketCode(category?: ComplaintCategory) {
+    const prefix = this.getPrefixByCategory(category);
     const date = new Date();
     const period = `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-    return `ADU-${period}-${randomBytes(10).toString('hex').toUpperCase()}`;
+    return `${prefix}-${period}-${randomBytes(10).toString('hex').toUpperCase()}`;
   }
 
   private buildWhere(query: ListComplaintsDto): Prisma.ComplaintWhereInput {
