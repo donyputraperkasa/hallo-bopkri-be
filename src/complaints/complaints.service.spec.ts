@@ -102,7 +102,7 @@ describe('ComplaintsService', () => {
       expect(mockPrisma.complaint.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            ticketCode: expect.stringMatching(/^ADU-\d{6}-[A-F0-9]{20}$/),
+            ticketCode: expect.stringMatching(/^CMP-\d{6}-[A-F0-9]{20}$/),
             category: ComplaintCategory.COMPLAINT,
           }),
         }),
@@ -110,10 +110,10 @@ describe('ComplaintsService', () => {
       expect(mockNotifications.notifyNewComplaint).toHaveBeenCalledWith(createdComplaint);
     });
 
-    it('should create question with QUESTION category and generate TNY prefix', async () => {
+    it('should create question with QUESTION category and generate QUE prefix', async () => {
       const createdComplaint = {
         id: 'uuid-2',
-        ticketCode: 'TNY-202608-ABCDEF1235',
+        ticketCode: 'QUE-202608-ABCDEF1235',
         category: ComplaintCategory.QUESTION,
         content: 'Pertanyaan seputar pendaftaran',
         tags: 'pendidikan',
@@ -134,7 +134,7 @@ describe('ComplaintsService', () => {
       expect(mockPrisma.complaint.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            ticketCode: expect.stringMatching(/^TNY-\d{6}-[A-F0-9]{20}$/),
+            ticketCode: expect.stringMatching(/^QUE-\d{6}-[A-F0-9]{20}$/),
             category: ComplaintCategory.QUESTION,
             tags: 'pendidikan',
           }),
@@ -142,10 +142,10 @@ describe('ComplaintsService', () => {
       );
     });
 
-    it('should create appreciation with APPRECIATION category and generate APR prefix', async () => {
+    it('should create appreciation with APPRECIATION category and generate APP prefix', async () => {
       const createdComplaint = {
         id: 'uuid-3',
-        ticketCode: 'APR-202608-ABCDEF1236',
+        ticketCode: 'APP-202608-ABCDEF1236',
         category: ComplaintCategory.APPRECIATION,
         content: 'Terima kasih atas pelayanannya',
         status: { id: 'status-new', code: 'NEW', name: 'Aduan Baru' },
@@ -164,7 +164,7 @@ describe('ComplaintsService', () => {
       expect(mockPrisma.complaint.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            ticketCode: expect.stringMatching(/^APR-\d{6}-[A-F0-9]{20}$/),
+            ticketCode: expect.stringMatching(/^APP-\d{6}-[A-F0-9]{20}$/),
             category: ComplaintCategory.APPRECIATION,
           }),
         }),

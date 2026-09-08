@@ -22,6 +22,7 @@ describe('AdminComplaintsController', () => {
     getDispatches: jest.fn().mockResolvedValue([]),
     exportRows: jest.fn().mockResolvedValue([]),
     exportDispatchedRows: jest.fn().mockResolvedValue([]),
+    attachment: jest.fn(),
   };
 
   const mockPrisma = {
@@ -128,9 +129,93 @@ describe('AdminComplaintsController', () => {
     });
   });
 
+  describe('exportExcel & exportPdf', () => {
+    it('should allow OWNER to export excel and pdf', async () => {
+      const req: any = { admin: { sub: 'owner-1', role: Role.owner } };
+      const excelRes = await controller.exportExcel({} as any, req);
+      expect(excelRes).toBeDefined();
+
+      const pdfRes = await controller.exportPdf({} as any, req);
+      expect(pdfRes).toBeDefined();
+    });
+
+    it('should prevent DIRECTOR and MANAGER from exporting excel', async () => {
+      const reqDir: any = { admin: { sub: 'dir-1', role: Role.director } };
+      await expect(controller.exportExcel({} as any, reqDir)).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      const reqMgr: any = { admin: { sub: 'mgr-1', role: Role.manager } };
+      await expect(controller.exportExcel({} as any, reqMgr)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should prevent DIRECTOR and MANAGER from exporting pdf', async () => {
+      const reqDir: any = { admin: { sub: 'dir-1', role: Role.director } };
+      await expect(controller.exportPdf({} as any, reqDir)).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      const reqMgr: any = { admin: { sub: 'mgr-1', role: Role.manager } };
+      await expect(controller.exportPdf({} as any, reqMgr)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
+
+  describe('downloadAttachment', () => {
+    beforeEach(() => {
+      jest.spyOn(service, 'attachment').mockResolvedValue({
+        id: 'att-1',
+        complaintId: 'comp-1',
+        originalName: 'bukti.jpg',
+        mimeType: 'image/jpeg',
+        storageKey: 'key.jpg',
+        size: 1000,
+        createdAt: new Date(),
+        absolutePath: __filename,
+      });
+    });
+
+    it('should allow OWNER to download with attachment disposition', async () => {
+      const req: any = { admin: { sub: 'owner-1', role: Role.owner } };
+      const res = await controller.downloadAttachment('att-1', '1', req);
+      expect(res.getHeaders().disposition).toContain('attachment;');
+    });
+
+    it('should serve inline preview for DIRECTOR without error', async () => {
+      const req: any = { admin: { sub: 'dir-1', role: Role.director } };
+      const res = await controller.downloadAttachment('att-1', '0', req);
+      expect(res.getHeaders().disposition).toContain('inline;');
+    });
+
+    it('should reject DIRECTOR if download=1 is requested', async () => {
+      const req: any = { admin: { sub: 'dir-1', role: Role.director } };
+      await expect(controller.downloadAttachment('att-1', '1', req)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should reject MANAGER if download=1 is requested', async () => {
+      const req: any = { admin: { sub: 'mgr-1', role: Role.manager } };
+      jest.spyOn(prisma.complaintDispatch, 'findFirst').mockResolvedValue({ id: 'disp-1' } as any);
+      await expect(controller.downloadAttachment('att-1', '1', req)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
+
   describe('updateStatus', () => {
     it('should prevent DIRECTOR from updating status (read-only)', async () => {
       const req: any = { admin: { sub: 'dir-1', role: Role.director } };
+      await expect(
+        controller.updateStatus('comp-1', { statusId: 'stat-1' }, req),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should prevent MANAGER from updating status (only owner can reply/update)', async () => {
+      const req: any = { admin: { sub: 'mgr-1', role: Role.manager } };
       await expect(
         controller.updateStatus('comp-1', { statusId: 'stat-1' }, req),
       ).rejects.toThrow(ForbiddenException);

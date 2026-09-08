@@ -58,10 +58,10 @@ export class AdminComplaintsController {
   }
 
   @Get('users')
-  @ApiOperation({ summary: 'Daftar admin (manager & director) untuk disposisi' })
+  @ApiOperation({ summary: 'Daftar manager bidang untuk disposisi' })
   async listUsers() {
     return this.prisma.admin.findMany({
-      where: { role: { in: [Role.manager, Role.director] } },
+      where: { role: Role.manager },
       select: {
         id: true,
         username: true,
@@ -75,16 +75,18 @@ export class AdminComplaintsController {
   }
 
   @Get('export.xlsx')
-  @ApiOperation({ summary: 'Export laporan aduan ke Excel' })
+  @ApiOperation({ summary: 'Export laporan aduan ke Excel (khusus Owner)' })
   async exportExcel(
     @Query() query: ListComplaintsDto,
     @Req() req: AdminRequest,
   ) {
     const admin = req.admin!;
-    const rows =
-      admin.role === Role.manager
-        ? await this.complaintsService.exportDispatchedRows(admin.sub, query)
-        : await this.complaintsService.exportRows(query);
+    if (admin.role !== Role.owner) {
+      throw new ForbiddenException(
+        'Hanya owner yang memiliki hak akses untuk mengunduh laporan Excel.',
+      );
+    }
+    const rows = await this.complaintsService.exportRows(query);
     const buffer = await this.reportExport.toExcel(rows);
     return new StreamableFile(buffer, {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -93,16 +95,18 @@ export class AdminComplaintsController {
   }
 
   @Get('export.pdf')
-  @ApiOperation({ summary: 'Export laporan aduan ke PDF' })
+  @ApiOperation({ summary: 'Export laporan aduan ke PDF (khusus Owner)' })
   async exportPdf(
     @Query() query: ListComplaintsDto,
     @Req() req: AdminRequest,
   ) {
     const admin = req.admin!;
-    const rows =
-      admin.role === Role.manager
-        ? await this.complaintsService.exportDispatchedRows(admin.sub, query)
-        : await this.complaintsService.exportRows(query);
+    if (admin.role !== Role.owner) {
+      throw new ForbiddenException(
+        'Hanya owner yang memiliki hak akses untuk mengunduh laporan PDF.',
+      );
+    }
+    const rows = await this.complaintsService.exportRows(query);
     const buffer = await this.reportExport.toPdf(rows);
     return new StreamableFile(buffer, {
       type: 'application/pdf',
@@ -111,14 +115,42 @@ export class AdminComplaintsController {
   }
 
   @Get('attachments/:attachmentId')
-  @ApiOperation({ summary: 'Unduh bukti lampiran sebagai admin' })
+  @ApiOperation({ summary: 'Pratinjau atau unduh bukti lampiran sebagai admin' })
   async downloadAttachment(
     @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+    @Query('download') isDownload: string,
+    @Req() req: AdminRequest,
   ) {
+    const admin = req.admin!;
     const attachment = await this.complaintsService.attachment(attachmentId);
+
+    // Manager hanya bisa melihat lampiran jika aduan didisposisikan kepada mereka
+    if (admin.role === Role.manager) {
+      const hasDispatch = await this.prisma.complaintDispatch.findFirst({
+        where: { complaintId: attachment.complaintId, adminId: admin.sub },
+      });
+      if (!hasDispatch) {
+        throw new ForbiddenException(
+          'Anda tidak memiliki akses untuk melihat lampiran ini.',
+        );
+      }
+    }
+
+    const wantsDownload = isDownload === '1' || isDownload === 'true';
+    if (wantsDownload && admin.role !== Role.owner) {
+      throw new ForbiddenException(
+        'Hanya owner yang memiliki hak akses untuk mengunduh berkas bukti lampiran.',
+      );
+    }
+
+    const disposition =
+      wantsDownload && admin.role === Role.owner
+        ? `attachment; filename="${encodeURIComponent(attachment.originalName)}"`
+        : `inline; filename="${encodeURIComponent(attachment.originalName)}"`;
+
     return new StreamableFile(createReadStream(attachment.absolutePath), {
       type: attachment.mimeType,
-      disposition: `attachment; filename="${encodeURIComponent(attachment.originalName)}"`,
+      disposition,
     });
   }
 
@@ -143,33 +175,23 @@ export class AdminComplaintsController {
   }
 
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Ubah status dan tambahkan progres publik' })
+  @ApiOperation({ summary: 'Ubah status dan tambahkan progres publik (khusus Owner)' })
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStatusDto,
     @Req() req: AdminRequest,
   ) {
     const admin = req.admin!;
-    if (admin.role === Role.director) {
+    if (admin.role !== Role.owner) {
       throw new ForbiddenException(
-        'Direktur hanya memiliki hak akses pemantauan (read-only).',
+        'Hanya owner yang memiliki hak akses untuk memperbarui status dan membalas pesan aduan.',
       );
-    }
-    if (admin.role === Role.manager) {
-      const hasDispatch = await this.prisma.complaintDispatch.findFirst({
-        where: { complaintId: id, adminId: admin.sub },
-      });
-      if (!hasDispatch) {
-        throw new ForbiddenException(
-          'Anda tidak dapat mengubah status aduan yang belum didisposisikan kepada Anda.',
-        );
-      }
     }
     return this.complaintsService.updateStatus(id, dto);
   }
 
   @Post(':id/status')
-  @ApiOperation({ summary: 'Ubah status dan tambahkan progres publik (POST)' })
+  @ApiOperation({ summary: 'Ubah status dan tambahkan progres publik (POST, khusus Owner)' })
   async updateStatusPost(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStatusDto,
