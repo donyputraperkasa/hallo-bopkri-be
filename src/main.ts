@@ -63,7 +63,7 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, swaggerDocument);
   }
 
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 
   console.clear();
   console.log(
