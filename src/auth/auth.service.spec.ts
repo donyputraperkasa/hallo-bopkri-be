@@ -20,6 +20,9 @@ describe('AuthService', () => {
           useValue: {
             admin: {
               findUnique: jest.fn(),
+              findFirst: jest.fn(),
+              update: jest.fn(),
+              create: jest.fn(),
             },
           },
         },
