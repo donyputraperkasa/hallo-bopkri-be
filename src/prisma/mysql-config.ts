@@ -1,3 +1,6 @@
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import { PrismaPg } from '@prisma/adapter-pg';
+
 export function parseMysqlUrl(connectionString: string) {
   const url = new URL(connectionString);
   if (url.protocol !== 'mysql:' && url.protocol !== 'mariadb:') {
@@ -12,4 +15,12 @@ export function parseMysqlUrl(connectionString: string) {
     database: decodeURIComponent(url.pathname.replace(/^\//, '')),
     connectionLimit: 5,
   };
+}
+
+export function createPrismaAdapter(connectionString: string) {
+  const url = new URL(connectionString);
+  if (url.protocol === 'postgresql:' || url.protocol === 'postgres:') {
+    return new PrismaPg({ connectionString });
+  }
+  return new PrismaMariaDb(parseMysqlUrl(connectionString));
 }
