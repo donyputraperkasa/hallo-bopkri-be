@@ -48,52 +48,59 @@ export function getAdminAccountsFromEnv(
 
   const managerDefinitions = [
     {
-      usernameEnv: 'PENDIDIKAN_USERNAME',
+      usernameEnvs: ['PENDIDIKAN_USERNAME', 'MGR_PENDIDIKAN_USERNAME'],
       defaultUsername: 'pendidikan',
-      passwordEnv: 'PENDIDIKAN_PASSWORD',
+      passwordEnvs: ['PENDIDIKAN_PASSWORD', 'MGR_PENDIDIKAN_PASSWORD'],
       bidang: 'pendidikan',
       displayName: 'Manajer Bidang Pendidikan',
     },
     {
-      usernameEnv: 'KEUANGAN_USERNAME',
+      usernameEnvs: ['KEUANGAN_USERNAME', 'MGR_KEUANGAN_USERNAME'],
       defaultUsername: 'keuangan',
-      passwordEnv: 'KEUANGAN_PASSWORD',
+      passwordEnvs: ['KEUANGAN_PASSWORD', 'MGR_KEUANGAN_PASSWORD'],
       bidang: 'keuangan',
       displayName: 'Manajer Bidang Keuangan',
     },
     {
-      usernameEnv: 'PSDM_USERNAME',
+      usernameEnvs: ['PSDM_USERNAME', 'MGR_PSDM_USERNAME'],
       defaultUsername: 'psdm',
-      passwordEnv: 'PSDM_PASSWORD',
+      passwordEnvs: ['PSDM_PASSWORD', 'MGR_PSDM_PASSWORD'],
       bidang: 'PSDM',
       displayName: 'Manajer Bidang PSDM',
     },
     {
-      usernameEnv: 'HUMAS_USERNAME',
+      usernameEnvs: ['HUMAS_USERNAME', 'MGR_HUMAS_USERNAME'],
       defaultUsername: 'humas',
-      passwordEnv: 'HUMAS_PASSWORD',
+      passwordEnvs: ['HUMAS_PASSWORD', 'MGR_HUMAS_PASSWORD'],
       bidang: 'humas',
       displayName: 'Manajer Bidang Humas',
     },
     {
-      usernameEnv: 'ASSET_USERNAME',
+      usernameEnvs: ['ASSET_USERNAME', 'MGR_ASSET_USERNAME'],
       defaultUsername: 'asset',
-      passwordEnv: 'ASSET_PASSWORD',
+      passwordEnvs: ['ASSET_PASSWORD', 'MGR_ASSET_PASSWORD'],
       bidang: 'asset',
       displayName: 'Manajer Bidang Asset & Sarpras',
     },
     {
-      usernameEnv: 'LAINNYA_USERNAME',
-      defaultUsername: 'lainnya',
-      passwordEnv: 'LAINNYA_PASSWORD',
+      usernameEnvs: ['LAINNYA_USERNAME', 'MGR_LAINNYA_USERNAME'],
+      defaultUsername: 'mgr_lainnya',
+      passwordEnvs: ['LAINNYA_PASSWORD', 'MGR_LAINNYA_PASSWORD'],
       bidang: 'lainnya',
       displayName: 'Manajer Bidang Umum & Lainnya',
     },
   ];
 
   for (const def of managerDefinitions) {
-    const username = (env[def.usernameEnv] ?? def.defaultUsername).trim();
-    const password = env[def.passwordEnv] || defaultManagerPassword;
+    const rawUsername = def.usernameEnvs
+      .map((key) => env[key]?.trim())
+      .find(Boolean);
+    const rawPassword = def.passwordEnvs
+      .map((key) => env[key])
+      .find((val) => Boolean(val && val.length > 0));
+
+    const username = rawUsername ?? def.defaultUsername;
+    const password = rawPassword || defaultManagerPassword;
 
     if (username && password) {
       accounts.push({
@@ -145,7 +152,6 @@ export async function syncSingleAdminAccount(
       ? target.passwordHash
       : await bcrypt.hash(acc.password, 12);
 
-    // Jika target dari slot berbeda dengan row lain yang kebetulan memakai username yang sama
     if (
       existingByUsername &&
       existingBySlot &&
