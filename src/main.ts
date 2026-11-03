@@ -11,6 +11,7 @@ async function bootstrap() {
   const isDevelopment = process.env.NODE_ENV !== 'production';
   const allowedOrigins = [
     'http://localhost:3000',
+    'https://hallo-bopkri-fe.vercel.app',
     ...(process.env.CORS_ORIGIN?.split(',') ?? []),
   ]
     .map((origin) => origin.trim())
