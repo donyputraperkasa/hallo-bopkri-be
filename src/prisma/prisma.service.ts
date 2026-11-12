@@ -8,6 +8,10 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
   constructor(config: ConfigService) {
     super({
       adapter: createPrismaAdapter(config.getOrThrow<string>('DATABASE_URL')),
+      transactionOptions: {
+        maxWait: 15_000,
+        timeout: 30_000,
+      },
     });
   }
 

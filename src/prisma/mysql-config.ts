@@ -20,7 +20,12 @@ export function parseMysqlUrl(connectionString: string) {
 export function createPrismaAdapter(connectionString: string) {
   const url = new URL(connectionString);
   if (url.protocol === 'postgresql:' || url.protocol === 'postgres:') {
-    return new PrismaPg({ connectionString });
+    return new PrismaPg({
+      connectionString,
+      max: 10,
+      connectionTimeoutMillis: 15_000,
+      idleTimeoutMillis: 30_000,
+    });
   }
   return new PrismaMariaDb(parseMysqlUrl(connectionString));
 }

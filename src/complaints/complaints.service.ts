@@ -108,7 +108,7 @@ export class ComplaintsService {
   async list(query: ListComplaintsDto) {
     const where = this.buildWhere(query);
     const skip = (query.page - 1) * query.limit;
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.complaint.findMany({
         where,
         skip,
@@ -162,7 +162,7 @@ export class ComplaintsService {
       id: { in: complaintIds },
     };
     const skip = (query.page - 1) * query.limit;
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.complaint.findMany({
         where,
         skip,
@@ -397,7 +397,7 @@ export class ComplaintsService {
   }
 
   async dashboard() {
-    const [total, byStatus, byCategory] = await this.prisma.$transaction([
+    const [total, byStatus, byCategory, statuses] = await Promise.all([
       this.prisma.complaint.count(),
       this.prisma.complaint.groupBy({
         by: ['statusId'],
@@ -409,10 +409,10 @@ export class ComplaintsService {
         _count: true,
         orderBy: { category: 'asc' },
       }),
+      this.prisma.complaintStatus.findMany({
+        orderBy: { sortOrder: 'asc' },
+      }),
     ]);
-    const statuses = await this.prisma.complaintStatus.findMany({
-      orderBy: { sortOrder: 'asc' },
-    });
     const countByStatusId = new Map(
       byStatus.map((item) => [item.statusId, item._count]),
     );
