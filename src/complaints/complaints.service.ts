@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { randomBytes } from 'crypto';
 import { unlink } from 'fs/promises';
 import { resolve } from 'path';
-import { ComplaintCategory, Prisma } from '@prisma/client';
+import { ComplaintCategory, Prisma, Role } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { getUploadDirectory } from './attachment.config';
@@ -108,7 +108,7 @@ export class ComplaintsService {
   async list(query: ListComplaintsDto) {
     const where = this.buildWhere(query);
     const skip = (query.page - 1) * query.limit;
-    const [data, total] = await Promise.all([
+    const [rawData, total, unreadCount] = await Promise.all([
       this.prisma.complaint.findMany({
         where,
         skip,
@@ -121,6 +121,8 @@ export class ComplaintsService {
           reporterName: true,
           content: true,
           tags: true,
+          isRead: true,
+          readAt: true,
           status: {
             select: {
               id: true,
@@ -136,7 +138,18 @@ export class ComplaintsService {
         },
       }),
       this.prisma.complaint.count({ where }),
+      this.prisma.complaint.count({
+        where: {
+          ...where,
+          isRead: false,
+          status: { code: 'NEW' },
+        },
+      }),
     ]);
+    const data = rawData.map((item) => ({
+      ...item,
+      isRead: item.isRead || item.status.code !== 'NEW',
+    }));
     return {
       data,
       meta: {
@@ -144,6 +157,7 @@ export class ComplaintsService {
         limit: query.limit,
         total,
         totalPages: Math.ceil(total / query.limit),
+        unreadCount,
       },
     };
   }
@@ -151,18 +165,24 @@ export class ComplaintsService {
   async listDispatched(adminId: string, query: ListComplaintsDto) {
     const dispatches = await this.prisma.complaintDispatch.findMany({
       where: { adminId },
-      select: { complaintId: true },
+      select: { complaintId: true, isRead: true, readAt: true },
     });
     const complaintIds = dispatches.map((d) => d.complaintId);
     if (complaintIds.length === 0) {
-      return { data: [], meta: { page: 1, limit: query.limit, total: 0, totalPages: 0 } };
+      return {
+        data: [],
+        meta: { page: 1, limit: query.limit, total: 0, totalPages: 0, unreadCount: 0 },
+      };
     }
+    const dispatchReadMap = new Map(
+      dispatches.map((d) => [d.complaintId, { isRead: d.isRead, readAt: d.readAt }]),
+    );
     const where: Prisma.ComplaintWhereInput = {
       ...this.buildWhere(query),
       id: { in: complaintIds },
     };
     const skip = (query.page - 1) * query.limit;
-    const [data, total] = await Promise.all([
+    const [rawData, total] = await Promise.all([
       this.prisma.complaint.findMany({
         where,
         skip,
@@ -175,6 +195,8 @@ export class ComplaintsService {
           reporterName: true,
           content: true,
           tags: true,
+          isRead: true,
+          readAt: true,
           status: {
             select: { id: true, code: true, name: true, color: true, isFinal: true },
           },
@@ -185,9 +207,24 @@ export class ComplaintsService {
       }),
       this.prisma.complaint.count({ where }),
     ]);
+    const data = rawData.map((item) => {
+      const dispatchState = dispatchReadMap.get(item.id);
+      return {
+        ...item,
+        isRead: dispatchState ? dispatchState.isRead : item.isRead,
+        readAt: dispatchState ? dispatchState.readAt : item.readAt,
+      };
+    });
+    const unreadCount = dispatches.filter((d) => !d.isRead).length;
     return {
       data,
-      meta: { page: query.page, limit: query.limit, total, totalPages: Math.ceil(total / query.limit) },
+      meta: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages: Math.ceil(total / query.limit),
+        unreadCount,
+      },
     };
   }
 
@@ -231,25 +268,31 @@ export class ComplaintsService {
       }
     }
 
-    // Sync tags if new bidangs are introduced
+    // Sync tags if new bidangs are introduced & mark complaint as read by owner
     const newBidangs = admins
       .map((a) => a.bidang)
       .filter((b): b is string => Boolean(b && b.trim()));
 
-    if (newBidangs.length > 0) {
-      const currentTags = (complaint.tags || '')
-        .split(',')
-        .map((t) => t.trim().toLowerCase())
-        .filter(Boolean);
-      const combined = Array.from(
-        new Set([...currentTags, ...newBidangs.map((b) => b.toLowerCase())]),
-      );
-      if (combined.length > currentTags.length) {
-        await this.prisma.complaint.update({
-          where: { id: complaintId },
-          data: { tags: combined.join(',') },
-        });
-      }
+    const currentTags = (complaint.tags || '')
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    const combined = Array.from(
+      new Set([...currentTags, ...newBidangs.map((b) => b.toLowerCase())]),
+    );
+    const shouldUpdateTags =
+      newBidangs.length > 0 && combined.length > currentTags.length;
+
+    if (shouldUpdateTags || !complaint.isRead) {
+      await this.prisma.complaint.update({
+        where: { id: complaintId },
+        data: {
+          ...(shouldUpdateTags ? { tags: combined.join(',') } : {}),
+          ...(!complaint.isRead
+            ? { isRead: true, readAt: new Date() }
+            : {}),
+        },
+      });
     }
 
     const message = results.length > 1
@@ -269,7 +312,7 @@ export class ComplaintsService {
     });
   }
 
-  async detail(id: string) {
+  async detail(id: string, viewer?: { sub: string; role: Role }) {
     const complaint = await this.prisma.complaint.findUnique({
       where: { id },
       include: {
@@ -295,7 +338,86 @@ export class ComplaintsService {
       },
     });
     if (!complaint) throw new NotFoundException('Aduan tidak ditemukan.');
+
+    const now = new Date();
+    if (viewer?.role === Role.manager) {
+      await this.prisma.complaintDispatch.updateMany({
+        where: { complaintId: id, adminId: viewer.sub, isRead: false },
+        data: { isRead: true, readAt: now },
+      });
+      return {
+        ...complaint,
+        isRead: true,
+        readAt: complaint.readAt ?? now,
+      };
+    }
+
+    if (!complaint.isRead) {
+      await this.prisma.complaint.update({
+        where: { id },
+        data: { isRead: true, readAt: now },
+      });
+      return {
+        ...complaint,
+        isRead: true,
+        readAt: now,
+      };
+    }
+
     return complaint;
+  }
+
+  async markAsRead(id: string, viewer?: { sub: string; role: Role }) {
+    const complaint = await this.prisma.complaint.findUnique({
+      where: { id },
+      select: { id: true, isRead: true, readAt: true },
+    });
+    if (!complaint) throw new NotFoundException('Aduan tidak ditemukan.');
+
+    const now = new Date();
+    if (viewer?.role === Role.manager) {
+      await this.prisma.complaintDispatch.updateMany({
+        where: { complaintId: id, adminId: viewer.sub },
+        data: { isRead: true, readAt: now },
+      });
+    } else if (!complaint.isRead) {
+      await this.prisma.complaint.update({
+        where: { id },
+        data: { isRead: true, readAt: now },
+      });
+    }
+
+    return {
+      message: 'Aduan berhasil ditandai sudah dibuka.',
+      id,
+      isRead: true,
+      readAt: complaint.readAt ?? now,
+    };
+  }
+
+  async markAllAsRead(viewer?: { sub: string; role: Role }) {
+    const now = new Date();
+    if (viewer?.role === Role.manager) {
+      const result = await this.prisma.complaintDispatch.updateMany({
+        where: { adminId: viewer.sub, isRead: false },
+        data: { isRead: true, readAt: now },
+      });
+      return {
+        message: 'Semua aduan berhasil ditandai sudah dibuka.',
+        updatedCount: result.count,
+        isRead: true,
+      };
+    }
+
+    const result = await this.prisma.complaint.updateMany({
+      where: { isRead: false },
+      data: { isRead: true, readAt: now },
+    });
+    return {
+      message: 'Semua aduan berhasil ditandai sudah dibuka.',
+      updatedCount: result.count,
+      isRead: true,
+    };
   }
 
   async updateStatus(id: string, dto: UpdateStatusDto) {
@@ -318,7 +440,7 @@ export class ComplaintsService {
     const complaint = await this.prisma.$transaction(async (tx) => {
       const complaint = await tx.complaint.update({
         where: { id },
-        data: { statusId: status.id },
+        data: { statusId: status.id, isRead: true, readAt: new Date() },
         include: { status: true },
       });
       await tx.complaintHistory.create({

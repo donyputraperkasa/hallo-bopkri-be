@@ -154,8 +154,32 @@ export class AdminComplaintsController {
     });
   }
 
+  @Patch('read-all')
+  @ApiOperation({ summary: 'Tandai semua aduan sudah dibuka' })
+  markAllAsRead(@Req() req: AdminRequest) {
+    return this.complaintsService.markAllAsRead(req.admin);
+  }
+
+  @Post('read-all')
+  @ApiOperation({ summary: 'Tandai semua aduan sudah dibuka (POST)' })
+  markAllAsReadPost(@Req() req: AdminRequest) {
+    return this.complaintsService.markAllAsRead(req.admin);
+  }
+
+  @Patch('mark-all-read')
+  @ApiOperation({ summary: 'Alias: Tandai semua aduan sudah dibuka' })
+  markAllReadAlias(@Req() req: AdminRequest) {
+    return this.complaintsService.markAllAsRead(req.admin);
+  }
+
+  @Post('mark-all-read')
+  @ApiOperation({ summary: 'Alias: Tandai semua aduan sudah dibuka (POST)' })
+  markAllReadAliasPost(@Req() req: AdminRequest) {
+    return this.complaintsService.markAllAsRead(req.admin);
+  }
+
   @Get(':id')
-  @ApiOperation({ summary: 'Detail lengkap aduan' })
+  @ApiOperation({ summary: 'Detail lengkap aduan (otomatis menandai sudah dibuka)' })
   async detail(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: AdminRequest,
@@ -171,7 +195,36 @@ export class AdminComplaintsController {
         );
       }
     }
-    return this.complaintsService.detail(id);
+    return this.complaintsService.detail(id, admin);
+  }
+
+  @Patch(':id/read')
+  @ApiOperation({ summary: 'Tandai satu aduan sudah dibuka' })
+  async markAsRead(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AdminRequest,
+  ) {
+    const admin = req.admin!;
+    if (admin.role === Role.manager) {
+      const hasDispatch = await this.prisma.complaintDispatch.findFirst({
+        where: { complaintId: id, adminId: admin.sub },
+      });
+      if (!hasDispatch) {
+        throw new ForbiddenException(
+          'Anda tidak memiliki akses untuk aduan ini.',
+        );
+      }
+    }
+    return this.complaintsService.markAsRead(id, admin);
+  }
+
+  @Post(':id/read')
+  @ApiOperation({ summary: 'Tandai satu aduan sudah dibuka (POST)' })
+  async markAsReadPost(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AdminRequest,
+  ) {
+    return this.markAsRead(id, req);
   }
 
   @Patch(':id/status')

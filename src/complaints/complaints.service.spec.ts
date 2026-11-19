@@ -17,6 +17,7 @@ describe('ComplaintsService', () => {
       findMany: jest.fn(),
       count: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       groupBy: jest.fn(),
     },
     complaintStatus: {
@@ -33,6 +34,7 @@ describe('ComplaintsService', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       upsert: jest.fn(),
+      updateMany: jest.fn(),
     },
     admin: {
       findUnique: jest.fn(),
@@ -197,7 +199,15 @@ describe('ComplaintsService', () => {
 
   describe('list and listDispatched', () => {
     it('should list complaints with pagination and tag filter', async () => {
-      const mockItems = [{ id: '1', ticketCode: 'ADU-1', tags: 'pendidikan' }];
+      const mockItems = [
+        {
+          id: '1',
+          ticketCode: 'ADU-1',
+          tags: 'pendidikan',
+          isRead: false,
+          status: { code: 'NEW' },
+        },
+      ];
       mockPrisma.complaint.findMany.mockResolvedValue(mockItems);
       mockPrisma.complaint.count.mockResolvedValue(1);
 
